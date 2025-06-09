@@ -1,0 +1,245 @@
+#include "userprog/exception.h"
+#include <inttypes.h>
+#include <stdio.h>
+#include "userprog/gdt.h"
+#include "userprog/syscall.h"
+#include "threads/interrupt.h"
+#include "threads/thread.h"
+
+#include "threads/vaddr.h"  /* PHYS_BASE, pg_round_down, PGSIZE */
+#include "vm/page.h"        /* sup_page_lookup, sup_page_load, sup_page_install 선언 */
+#include "vm/frame.h"  /* frame_alloc, frame_free를 쓰기 위해 */
+#include "vm/swap.h"
+
+#include "threads/synch.h"
+
+/* Number of page faults processed. */
+static long long page_fault_cnt;
+
+static void kill (struct intr_frame *);
+static void page_fault (struct intr_frame *);
+
+/* Registers handlers for interrupts that can be caused by user
+   programs.
+
+   In a real Unix-like OS, most of these interrupts would be
+   passed along to the user process in the form of signals, as
+   described in [SV-386] 3-24 and 3-25, but we don't implement
+   signals.  Instead, we'll make them simply kill the user
+   process.
+
+   Page faults are an exception.  Here they are treated the same
+   way as other exceptions, but this will need to change to
+   implement virtual memory.
+
+   Refer to [IA32-v3a] section 5.15 "Exception and Interrupt
+   Reference" for a description of each of these exceptions. */
+void
+exception_init (void)
+{
+  /* These exceptions can be raised explicitly by a user program,
+     e.g. via the INT, INT3, INTO, and BOUND instructions.  Thus,
+     we set DPL==3, meaning that user programs are allowed to
+     invoke them via these instructions. */
+  intr_register_int (3, 3, INTR_ON, kill, "#BP Breakpoint Exception");
+  intr_register_int (4, 3, INTR_ON, kill, "#OF Overflow Exception");
+  intr_register_int (5, 3, INTR_ON, kill,
+                     "#BR BOUND Range Exceeded Exception");
+
+  /* These exceptions have DPL==0, preventing user processes from
+     invoking them via the INT instruction.  They can still be
+     caused indirectly, e.g. #DE can be caused by dividing by
+     0.  */
+  intr_register_int (0, 0, INTR_ON, kill, "#DE Divide Error");
+  intr_register_int (1, 0, INTR_ON, kill, "#DB Debug Exception");
+  intr_register_int (6, 0, INTR_ON, kill, "#UD Invalid Opcode Exception");
+  intr_register_int (7, 0, INTR_ON, kill,
+                     "#NM Device Not Available Exception");
+  intr_register_int (11, 0, INTR_ON, kill, "#NP Segment Not Present");
+  intr_register_int (12, 0, INTR_ON, kill, "#SS Stack Fault Exception");
+  intr_register_int (13, 0, INTR_ON, kill, "#GP General Protection Exception");
+  intr_register_int (16, 0, INTR_ON, kill, "#MF x87 FPU Floating-Point Error");
+  intr_register_int (19, 0, INTR_ON, kill,
+                     "#XF SIMD Floating-Point Exception");
+
+  /* Most exceptions can be handled with interrupts turned on.
+     We need to disable interrupts for page faults because the
+     fault address is stored in CR2 and needs to be preserved. */
+  intr_register_int (14, 0, INTR_OFF, page_fault, "#PF Page-Fault Exception");
+}
+
+/* Prints exception statistics. */
+void
+exception_print_stats (void)
+{
+  printf ("Exception: %lld page faults\n", page_fault_cnt);
+}
+
+/* Handler for an exception (probably) caused by a user process. */
+static void
+kill (struct intr_frame *f)
+{
+  /* This interrupt is one (probably) caused by a user process.
+     For example, the process might have tried to access unmapped
+     virtual memory (a page fault).  For now, we simply kill the
+     user process.  Later, we'll want to handle page faults in
+     the kernel.  Real Unix-like operating systems pass most
+     exceptions back to the process via signals, but we don't
+     implement them. */
+
+  /* The interrupt frame's code segment value tells us where the
+     exception originated. */
+  switch (f->cs)
+    {
+    case SEL_UCSEG:
+      /* User's code segment, so it's a user exception, as we
+         expected.  Kill the user process.  */
+      printf ("%s: dying due to interrupt %#04x (%s).\n",
+              thread_name (), f->vec_no, intr_name (f->vec_no));
+      intr_dump_frame (f);
+      sys_exit (-1); // terminate. no more wait, parent
+
+    case SEL_KCSEG:
+      /* Kernel's code segment, which indicates a kernel bug.
+         Kernel code shouldn't throw exceptions.  (Page faults
+         may cause kernel exceptions--but they shouldn't arrive
+         here.)  Panic the kernel to make the point.  */
+      intr_dump_frame (f);
+      PANIC ("Kernel bug - unexpected interrupt in kernel");
+
+    default:
+      /* Some other code segment?  Shouldn't happen.  Panic the
+         kernel. */
+      printf ("Interrupt %#04x (%s) in unknown segment %04x\n",
+             f->vec_no, intr_name (f->vec_no), f->cs);
+      sys_exit (-1); // terminate. no more wait, parent
+    }
+}
+
+/* Page fault handler.  This is a skeleton that must be filled in
+   to implement virtual memory.  Some solutions to project 2 may
+   also require modifying this code.
+
+   At entry, the address that faulted is in CR2 (Control Register
+   2) and information about the fault, formatted as described in
+   the PF_* macros in exception.h, is in F's error_code member.  The
+   example code here shows how to parse that information.  You
+   can find more information about both of these in the
+   description of "Interrupt 14--Page Fault Exception (#PF)" in
+   [IA32-v3a] section 5.15 "Exception and Interrupt Reference". */
+
+
+#define STACK_MAX_LIMIT (8 * 1024 * 1024)  /* 최대 스택 크기: 8MB */
+
+static bool
+should_grow_stack (void *fault_addr, void *esp) 
+{
+    /* 
+       1) fault_addr < PHYS_BASE (유저 공간 최상위)
+       2) fault_addr >= PHYS_BASE - STACK_MAX_LIMIT (최대 스택 크기 내)
+       3) fault_addr >= esp - 32 (esp 주변 32바이트 이내)
+    */
+    if (fault_addr < PHYS_BASE &&
+        fault_addr >= (PHYS_BASE - STACK_MAX_LIMIT) &&
+        fault_addr >= ((uint8_t *) esp - 32)) 
+    {
+        return true;
+    }
+    return false;
+}
+
+
+static void
+page_fault (struct intr_frame *f) 
+{
+    bool not_present;   /* 페이지가 없어서 생긴 fault인지 */
+    bool write;         /* 쓰기 접근 시도인지 */
+    bool user;          /* 사용자 모드 접근 시도인지 */
+    void *fault_addr;   /* 잘못 접근한 사용자 가상 주소 */
+
+    /* 1) CR2 레지스터에서 faulting address 얻기 */
+    asm ("movl %%cr2, %0" : "=r" (fault_addr));
+
+    /* 2) 인터럽트 허용 & 통계 증가 */
+    intr_enable ();
+    page_fault_cnt++;
+
+    /* 3) 에러 코드 해석 */
+    not_present = (f->error_code & PF_P) == 0;
+    write       = (f->error_code & PF_W) != 0;
+    user        = (f->error_code & PF_U) != 0;
+
+
+    /* save user esp */
+    if (f->cs == SEL_UCSEG) {
+	thread_current()->user_esp = f->esp;
+    }
+
+
+    /* 3-2) handle normal faults */
+    if (vm_handle_fault(f, fault_addr, user, write, not_present))
+	return;
+
+
+    /* 4) 커널 모드에서 발생한 페이지 폴트라면 기존 처리 */
+    if (!user) {
+        f->eip = (void *) f->eax;
+        f->eax = 0xffffffff;
+        return;
+    }
+
+    /* 5) 사용자 모드 페이지 폴트 처리: SPT 조회 + 스택 확장 */
+    struct thread *t = thread_current ();
+
+
+
+
+    /* 5-1) SPT 접근 보호용 락 획득 */
+    lock_acquire (&t->page_lock);
+
+    /* 5-2) SPT에서 fault_addr에 해당하는 엔트리 조회 */
+    struct sup_page *sp = sup_page_lookup (t, fault_addr);
+    if (sp != NULL) {
+        /* (A) SPT에 등록된 엔트리가 있으면 실제 로드 & 매핑 시도 */
+        bool ok = sup_page_load (t, sp);
+        lock_release (&t->page_lock);
+        if (!ok)
+            sys_exit (-1);
+        return;  /* 페이지 로드 성공 후 복귀 */
+    }
+
+    /* 5-3) SPT 엔트리가 없으면 스택 확장 여부 판별 */
+ 
+    if (not_present && should_grow_stack (fault_addr, f->esp)) {
+        void *page_u = pg_round_down (fault_addr);
+
+    /* 1) 반드시 먼저 락 해제 */
+        lock_release (&t->page_lock);
+
+    /* 2) 스택 확장을 위해 SPT에 항목 설치 (이 시점엔 page_lock이 없음) */
+        if (!sup_page_install(t, page_u,
+                          PAGE_ZERO, NULL, 0, 0, PGSIZE, true)) {
+        sys_exit (-1);
+        }
+
+        /* 3) 다시 lock_acquire, 이후 sup_page_load 호출 */
+        lock_acquire (&t->page_lock);
+        struct sup_page *new_sp = sup_page_lookup (t, page_u);
+        if (new_sp == NULL) {
+            lock_release (&t->page_lock);
+            sys_exit (-1);
+        }
+        bool ok = sup_page_load (t, new_sp);
+        lock_release (&t->page_lock);
+        if (!ok)
+            sys_exit (-1);
+        return;
+    }
+
+    /* 5-4) 위 두 경우가 아니면 불법 접근 → 프로세스 종료 */
+    lock_release (&t->page_lock);
+    sys_exit (-1);
+}
+
+
+

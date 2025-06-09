@@ -1,0 +1,22 @@
+/* File: src/vm/swap.h */
+#ifndef VM_SWAP_H
+#define VM_SWAP_H
+
+#include <stdbool.h>
+#include <stddef.h>
+
+/* Swap 초기화: boot 시 한 번 호출 */
+void swap_init (void);
+
+/* 물리 페이지를 swap으로 내보내고, 할당된 swap 슬롯 번호를 리턴.
+   실패 시 -1 리턴 */
+int swap_out (void *kpage);
+
+/* swap 슬롯에서 물리 페이지로 복원 */
+void swap_in (int slot, void *kpage);
+
+/* 해당 swap 슬롯을 해제 */
+void swap_free (int slot);
+
+#endif /* VM_SWAP_H */
+
