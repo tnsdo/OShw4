@@ -547,7 +547,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
 
 static bool
-lazy_load_segment(struct sup_page *page, void *aux)
+lazy_load_segment(struct sup_page *page, enum vm_type type, void *aux)
 {
     struct segment_aux *segment = (struct segment_aux *)aux;
     struct file *file = segment->file;
@@ -556,7 +556,9 @@ lazy_load_segment(struct sup_page *page, void *aux)
     size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
     file_seek(file, offset);
-    if (file_read(file, page->frame->kva, page_read_bytes) != (int) page_read_bytes)
+    ASSERT(page->frame != NULL);
+    void *kva = page->frame->kva;
+    if (file_read(file, kva, page_read_bytes) != (int) page_read_bytes)
         return false;
     memset(page->frame->kva + page_read_bytes, 0, page_zero_bytes);
 
