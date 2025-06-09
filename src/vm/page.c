@@ -5,6 +5,7 @@
 #include "threads/palloc.h"
 #include "threads/vaddr.h"
 #include "threads/interrupt.h"
+#include "vm/frame.h"
 
 /* pagedir_* 함수들을 쓰기 위해 */
 #include "userprog/pagedir.h"
@@ -17,7 +18,7 @@
 
 #include <string.h>    /* memset */
 #include <stdlib.h>    /* malloc, free */
-#include <threads/synch.h>
+#include "threads/synch.h"
 #include <debug.h>
 
 /* 전역 락: supplemental page table 조작 시 사용 */

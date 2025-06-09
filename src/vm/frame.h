@@ -6,6 +6,9 @@
 #include <stdbool.h>
 #include "threads/thread.h"
 #include "threads/synch.h"
+#include "vm/page.h"
+
+struct sup_page;
 
 /* 한 물리 페이지(프레임)에 대응되는 구조체 */
 struct frame {
