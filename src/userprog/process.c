@@ -547,7 +547,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
 
 static bool
-lazy_load_segment(struct page *page, void *aux)
+lazy_load_segment(struct sup_page *page, void *aux)
 {
     struct segment_aux *segment = (struct segment_aux *)aux;
     struct file *file = segment->file;
