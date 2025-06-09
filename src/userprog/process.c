@@ -421,9 +421,8 @@ struct Elf32_Phdr
 
 static bool setup_stack (void **esp);
 static bool validate_segment (const struct Elf32_Phdr *, struct file *);
-static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
-                          uint32_t read_bytes, uint32_t zero_bytes,
-                          bool writable);
+
+
 
 /* Loads an ELF executable from FILE_NAME into the current thread.
    Stores the executable's entry point into *EIP
@@ -549,12 +548,11 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
 
 static bool
-lazy_load_segment(struct sup_page *page, enum vm_type type, void *aux)
+lazy_load_segment(struct sup_page *page, enum vm_type type, void *aux UNUSED)
 {
-    struct segment_aux *segment = (struct segment_aux *)aux;
-    struct file *file = segment->file;
-    off_t offset = segment->offset;
-    size_t page_read_bytes = segment->read_bytes < PGSIZE ? segment->read_bytes : PGSIZE;
+    struct file *file = page->file;
+    off_t offset = page->ofs;
+    size_t page_read_bytes = page->read_bytes < PGSIZE ? page->read_bytes : PGSIZE;
     size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
     file_seek(file, offset);
@@ -579,7 +577,7 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
         if (sp == NULL)
             return false;
         sp->file = file;
-        sp->offset = ofs;
+        sp->ofs = ofs;
         sp->read_bytes = page_read_bytes;
         sp->zero_bytes = page_zero_bytes;
 
