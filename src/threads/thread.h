@@ -120,8 +120,6 @@ struct thread
 
     struct list mmap_list;              /* 이 프로세스의 mmap_entry 리스트 */
     int next_mapid;                     /* 다음 mmap ID 카운터 */
-
-    uint32_t user_esp;
 #endif
 
     /* Owned by thread.c. */

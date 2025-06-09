@@ -74,9 +74,7 @@ syscall_handler (struct intr_frame *f)
 
   // The system call number is in the 32-bit word at the caller's stack pointer.
   memread_user(f->esp, &syscall_number, intsize);
-  
-  /*  save user rsp */
-  thread_current() -> user_esp = f->esp;
+
 
   // Dispatch w.r.t system call number
   // SYS_*** constants are defined in syscall-nr.h

@@ -16,12 +16,10 @@
 #include "threads/init.h"
 #include "threads/interrupt.h"
 #include "threads/palloc.h"
+#include "threads/thread.h"
 #include "threads/vaddr.h"
 
 #include "vm/page.h"    /* sup_page_table_init, sup_page_destroy 등 선언 */
-#include "vm/frame.h"
-#include "threads/thread.h"
-#include "threads/malloc.h"
 
 
 #ifdef DEBUG
@@ -33,7 +31,6 @@
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 static void push_arguments (const char *[], int cnt, void **esp);
-
 
 /* Starts a new thread running a user program loaded from
    `cmdline`. The new thread may be scheduled (and may even exit)
@@ -421,8 +418,9 @@ struct Elf32_Phdr
 
 static bool setup_stack (void **esp);
 static bool validate_segment (const struct Elf32_Phdr *, struct file *);
-
-
+static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
+                          uint32_t read_bytes, uint32_t zero_bytes,
+                          bool writable);
 
 /* Loads an ELF executable from FILE_NAME into the current thread.
    Stores the executable's entry point into *EIP
@@ -545,55 +543,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
 }
 
 /* load() helpers. */
-
-
-static bool
-lazy_load_segment(struct sup_page *page, enum vm_type type, void *aux UNUSED)
-{
-    struct file *file = page->file;
-    off_t offset = page->ofs;
-    size_t page_read_bytes = page->read_bytes < PGSIZE ? page->read_bytes : PGSIZE;
-    size_t page_zero_bytes = PGSIZE - page_read_bytes;
-
-    file_seek(file, offset);
-    ASSERT(page->frame != NULL);
-    void *kpage = page->frame->kpage;
-    if (file_read(file, kpage, page_read_bytes) != (int) page_read_bytes)
-        return false;
-    memset(kpage + page_read_bytes, 0, page_zero_bytes);
-
-    return true;
-}
-
-static bool
-load_segment(struct file *file, off_t ofs, uint8_t *upage,
-             uint32_t read_bytes, uint32_t zero_bytes, bool writable)
-{
-    while (read_bytes > 0 || zero_bytes > 0) {
-        size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
-        size_t page_zero_bytes = PGSIZE - page_read_bytes;
-
-        struct sup_page *sp = malloc(sizeof(struct sup_page));
-        if (sp == NULL)
-            return false;
-        sp->file = file;
-        sp->ofs = ofs;
-        sp->read_bytes = page_read_bytes;
-        sp->zero_bytes = page_zero_bytes;
-
-        if (!vm_alloc_page_with_initializer(VM_ANON, upage, writable,
-                                            lazy_load_segment, sp))
-            return false;
-
-        read_bytes -= page_read_bytes;
-        zero_bytes -= page_zero_bytes;
-        upage += PGSIZE;
-        ofs += page_read_bytes;
-    }
-    return true;
-}
-
-
 
 static bool install_page (void *upage, void *kpage, bool writable);
 

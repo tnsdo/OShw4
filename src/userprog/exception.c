@@ -169,18 +169,6 @@ page_fault (struct intr_frame *f)
     write       = (f->error_code & PF_W) != 0;
     user        = (f->error_code & PF_U) != 0;
 
-
-    /* save user esp */
-    if (f->cs == SEL_UCSEG) {
-	thread_current()->user_esp = f->esp;
-    }
-
-
-    /* 3-2) handle normal faults */
-    if (vm_handle_fault(f, fault_addr, user, write, not_present))
-	return;
-
-
     /* 4) 커널 모드에서 발생한 페이지 폴트라면 기존 처리 */
     if (!user) {
         f->eip = (void *) f->eax;

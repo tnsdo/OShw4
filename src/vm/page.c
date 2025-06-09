@@ -4,8 +4,6 @@
 #include "threads/thread.h"
 #include "threads/palloc.h"
 #include "threads/vaddr.h"
-#include "threads/interrupt.h"
-#include "vm/frame.h"
 
 /* pagedir_* 함수들을 쓰기 위해 */
 #include "userprog/pagedir.h"
@@ -18,7 +16,7 @@
 
 #include <string.h>    /* memset */
 #include <stdlib.h>    /* malloc, free */
-#include "threads/synch.h"
+#include <threads/synch.h>
 #include <debug.h>
 
 /* 전역 락: supplemental page table 조작 시 사용 */
@@ -243,68 +241,3 @@ sup_page_destroy (struct thread *t) {
     }
 }
 
-
-/* to handle lazy loading */
-
-
-bool vm_alloc_page_with_initializer(enum vm_type type, void *va,
-                                    bool writable, vm_initializer *init, void *aux) {
-    struct supplemental_page_table *spt = &thread_current()->spt;
-
-    if (spt_find_page(spt, va) != NULL)
-        return false;
-
-    struct page *page = malloc(sizeof(struct page));
-    if (page == NULL)
-        return false;
-
-    vm_initializer *page_initializer = NULL;
-
-    switch (VM_TYPE(type)) {
-        case VM_ANON:
-            page_initializer = anon_initializer;
-            break;
-        case VM_FILE:
-            page_initializer = file_backed_initializer;
-            break;
-        default:
-            free(page);
-            return false;
-    }
-
-    uninit_new(page, va, page_initializer, type, aux, vm_destroy);
-    page->writable = writable;
-
-    if (!spt_insert_page(spt, page)) {
-        free(page);
-        return false;
-    }
-
-    return true;
-}
-
-
-
-
-/* page fault handler */
-bool vm_handle_fault(struct intr_frame *f, void *addr, bool user, bool write, bool not_present){
-	struct thread *curr = thread_current();
-	
-	/* check the user address */
-	if(!is_user_vaddr(addr)) return false;
-	
-	/* check valid stack growth */
-	void *esp = (user ? f->esp : curr->user_esp);
-	if ((uint8_t *)addr >= (uint8_t *)esp - 8 && (PHYS_BASE - pg_round_down(addr)) <= (1 << 20)){
-	vm_stack_growth(addr);
-	return true;
-	}
-	return false;
-}
-
-void vm_stack_growth(void *addr){
-	void *stack_bottom = pg_round_down(addr);
-	if (!vm_alloc_page(VM_ANON, stack_bottom, true)){
-	PANIC("Stack groth allocation failed!");
-	}
-}

@@ -7,8 +7,6 @@
 #include "threads/thread.h"
 #include "threads/synch.h"
 
-struct sup_page;
-
 /* 한 물리 페이지(프레임)에 대응되는 구조체 */
 struct frame {
     void *kpage;             /* palloc_get_page(PAL_USER)로 받은 커널 물리 주소 */

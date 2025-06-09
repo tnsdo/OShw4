@@ -42,8 +42,5 @@ struct file_desc {
   struct file* file;
 };
 
-
-
-
 #endif /* userprog/process.h */
 

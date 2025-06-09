@@ -5,8 +5,7 @@
 #include <stdbool.h>
 #include <list.h>
 #include <filesys/file.h>
-#include "threads/interrupt.h"
-#include "threads/thread.h"
+#include <threads/thread.h>
 
 /* 페이지 종류 구분 */
 enum page_type {
@@ -15,15 +14,6 @@ enum page_type {
     PAGE_SWAP,   /* 스왑에서 불러올 때 */
     PAGE_MMAP    /* mmap된 파일 페이지 */
 };
-
-/* vm type division */
-enum vm_type {
-    VM_UNINIT = 0,
-    VM_ANON,
-    VM_FILE,
-};
-
-struct frame;
 
 /* Supplemental Page Table 엔트리 구조체 */
 struct sup_page {
@@ -36,7 +26,6 @@ struct sup_page {
     bool writable;           /* 쓰기 가능 여부 */
     int swap_slot;           /* 스왑 슬롯 (없으면 -1) */
     struct list_elem elem;   /* 프로세스별 리스트 연결용 */
-    struct frame *frame;
 };
 
 /* 보조 페이지 테이블 관련 함수들 */
@@ -84,15 +73,5 @@ void sup_page_remove(struct thread *t, struct sup_page *sp);
    Releases any swap slots and frees all supplemental page entries. */
 void sup_page_destroy(struct thread *t);
 
-/* handle lazy loading */
-typedef bool vm_initializer(struct sup_page *page, enum vm_type type, void *aux);
-
-bool vm_alloc_page_with_initializer(enum vm_type type, void *va, bool writable, vm_initializer *init, void *aux);
-
-/* handle fault */
-bool vm_handle_fault(struct intr_frame *f, void *addr, bool user, bool write, bool not_present);
-
-/* stack growth */
-void stack_growth(void *addr);
 #endif /* VM_PAGE_H */
 
