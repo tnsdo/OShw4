@@ -1,3 +1,4 @@
+#include "vm/page.h"
 #include "userprog/exception.h"
 #include <inttypes.h>
 #include <stdio.h>
@@ -7,7 +8,7 @@
 #include "threads/thread.h"
 
 #include "threads/vaddr.h"  /* PHYS_BASE, pg_round_down, PGSIZE */
-#include "vm/page.h"        /* sup_page_lookup, sup_page_load, sup_page_install 선언 */
+//#include "vm/page.h"        /* sup_page_lookup, sup_page_load, sup_page_install 선언 */
 #include "vm/frame.h"  /* frame_alloc, frame_free를 쓰기 위해 */
 #include "vm/swap.h"
 
@@ -214,7 +215,7 @@ page_fault (struct intr_frame *f)
 
     /* 2) 스택 확장을 위해 SPT에 항목 설치 (이 시점엔 page_lock이 없음) */
         if (!sup_page_install(t, page_u,
-                          PAGE_ZERO, NULL, 0, 0, PGSIZE, true)) {
+                          PAGE_ZERO, NULL, 0, 0, (size_t) PGSIZE, true)) {
         sys_exit (-1);
         }
 
