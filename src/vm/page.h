@@ -6,8 +6,6 @@
 #include <list.h>
 #include <filesys/file.h>
 #include <threads/thread.h>
-#include "userprog/exception.c"
-
 
 /* 페이지 종류 구분 */
 enum page_type {
