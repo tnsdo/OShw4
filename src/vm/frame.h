@@ -6,7 +6,6 @@
 #include <stdbool.h>
 #include "threads/thread.h"
 #include "threads/synch.h"
-#include "vm/page.h"
 
 struct sup_page;
 

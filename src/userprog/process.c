@@ -575,16 +575,16 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
         size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
         size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
-        struct segment_aux *aux = malloc(sizeof(struct segment_aux));
-        if (aux == NULL)
+        struct sup_page *sp = malloc(sizeof(struct sup_page));
+        if (sp == NULL)
             return false;
-        aux->file = file;
-        aux->offset = ofs;
-        aux->read_bytes = page_read_bytes;
-        aux->zero_bytes = page_zero_bytes;
+        sp->file = file;
+        sp->offset = ofs;
+        sp->read_bytes = page_read_bytes;
+        sp->zero_bytes = page_zero_bytes;
 
         if (!vm_alloc_page_with_initializer(VM_ANON, upage, writable,
-                                            lazy_load_segment, aux))
+                                            lazy_load_segment, sp))
             return false;
 
         read_bytes -= page_read_bytes;
