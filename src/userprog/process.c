@@ -19,9 +19,10 @@
 #include "threads/vaddr.h"
 
 #include "vm/page.h"    /* sup_page_table_init, sup_page_destroy 등 선언 */
+#include "vm/frame.h"
 #include "threads/thread.h"
 #include "threads/malloc.h"
-#include "vm/frame.h"
+
 
 #ifdef DEBUG
 #define _DEBUG_PRINTF(...) printf(__VA_ARGS__)
