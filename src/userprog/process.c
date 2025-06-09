@@ -21,6 +21,7 @@
 #include "vm/page.h"    /* sup_page_table_init, sup_page_destroy 등 선언 */
 #include "threads/thread.h"
 #include "threads/malloc.h"
+#include "vm/frame.h"
 
 #ifdef DEBUG
 #define _DEBUG_PRINTF(...) printf(__VA_ARGS__)
@@ -557,10 +558,10 @@ lazy_load_segment(struct sup_page *page, enum vm_type type, void *aux)
 
     file_seek(file, offset);
     ASSERT(page->frame != NULL);
-    void *kva = page->frame->kva;
-    if (file_read(file, kva, page_read_bytes) != (int) page_read_bytes)
+    void *kpage = page->frame->kpage;
+    if (file_read(file, kpage, page_read_bytes) != (int) page_read_bytes)
         return false;
-    memset(page->frame->kva + page_read_bytes, 0, page_zero_bytes);
+    memset(kpage + page_read_bytes, 0, page_zero_bytes);
 
     return true;
 }
