@@ -19,6 +19,12 @@
 #include <threads/synch.h>
 #include <debug.h>
 
+#include "userprog/syscall.h"
+#include <stdbool.h>
+#include <stdio.h>
+
+#define STACK_LIMIT (1 << 20)
+
 /* 전역 락: supplemental page table 조작 시 사용 */
 static struct lock page_table_lock;
 static bool page_table_lock_inited = false;
@@ -239,5 +245,41 @@ sup_page_destroy (struct thread *t) {
         list_remove (&sp->elem);
         free (sp);
     }
+}
+
+
+/* stack growth heuristic + allocation */
+bool
+vm_try_handle_fault(struct intr_frame *f, void *addr, bool user, bool write, bool not_present)
+{
+  struct thread *t = thread_current();
+
+  if (user && not_present) {
+    void *esp = (void*) t->saved_esp;
+
+    if ((uint8_t*)addr >= (uint8_t*)esp - 32 &&
+        (uint8_t*)addr >= (uint8_t*)(PHYS_BASE - STACK_LIMIT) &&
+        (uint8_t*)addr < PHYS_BASE) {
+      vm_stack_growth(addr);
+      return true;
+    }
+  }
+
+  return false;
+}
+
+void
+vm_stack_growth(void *addr)
+{
+  void *page_addr = pg_round_down(addr);
+
+  if ((uint8_t*)page_addr < (uint8_t*)(PHYS_BASE - STACK_LIMIT))
+    return;  // beyond limit
+
+  sup_page_install(thread_current(),
+                   page_addr,
+                   PAGE_ZERO,
+                   NULL, 0, 0, PGSIZE,
+                   true);
 }
 

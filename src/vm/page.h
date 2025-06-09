@@ -6,6 +6,8 @@
 #include <list.h>
 #include <filesys/file.h>
 #include <threads/thread.h>
+#include "userprog/exception.c"
+
 
 /* 페이지 종류 구분 */
 enum page_type {
@@ -73,5 +75,11 @@ void sup_page_remove(struct thread *t, struct sup_page *sp);
    Releases any swap slots and frees all supplemental page entries. */
 void sup_page_destroy(struct thread *t);
 
+
+/* stack growth */
+struct intr_frame;
+bool vm_try_handle_fault(struct intr_frame *f, void *addr, bool user, bool write, bool not_present);
+
+void vm_stack_growth(void *addr);
 #endif /* VM_PAGE_H */
 

@@ -12,6 +12,8 @@
 #include "vm/swap.h"
 
 #include "threads/synch.h"
+#include "threads/thread.h"
+#include "userprog/gdt.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -168,6 +170,12 @@ page_fault (struct intr_frame *f)
     not_present = (f->error_code & PF_P) == 0;
     write       = (f->error_code & PF_W) != 0;
     user        = (f->error_code & PF_U) != 0;
+
+    /* 3-1) user mode fault */
+    if(f->cs = SEL_UCSEG){
+	thread_current()->saved_esp =(uint32_t) f->esp;
+    } 
+
 
     /* 4) 커널 모드에서 발생한 페이지 폴트라면 기존 처리 */
     if (!user) {
